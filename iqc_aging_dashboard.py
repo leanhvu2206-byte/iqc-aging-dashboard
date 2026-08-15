@@ -1,3 +1,4 @@
+# DASHBOARD VERSION: BIG-NUMBER-TABLES-V2
 import os
 from datetime import datetime
 
@@ -67,6 +68,57 @@ st.markdown(
         border: 1px solid #E7ECF4;
         border-radius: 12px;
         overflow: hidden;
+    }
+
+    .big-table-wrap {
+        background: #FFFFFF;
+        border: 1px solid #DDE4EE;
+        border-radius: 14px;
+        overflow-x: auto;
+        box-shadow: 0 4px 14px rgba(31, 48, 78, 0.05);
+        margin-top: 4px;
+        margin-bottom: 14px;
+    }
+    .big-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: Arial, sans-serif;
+        background: #FFFFFF;
+    }
+    .big-table thead th {
+        background: #F3F5FA;
+        color: #566176;
+        font-size: 18px;
+        font-weight: 800;
+        padding: 16px 14px;
+        border-bottom: 1px solid #DDE4EE;
+        border-right: 1px solid #E5EAF1;
+        white-space: nowrap;
+        text-align: left;
+    }
+    .big-table tbody td {
+        color: #172B4D;
+        font-size: 18px;
+        font-weight: 650;
+        padding: 16px 14px;
+        border-bottom: 1px solid #E7ECF4;
+        border-right: 1px solid #EEF1F5;
+        white-space: nowrap;
+    }
+    .big-table tbody tr:nth-child(even) {background: #FBFCFE;}
+    .big-table tbody tr:hover {background: #F2F6FF;}
+    .big-table td.num {
+        text-align: right;
+        font-size: 28px !important;
+        font-weight: 900 !important;
+        color: #3B2BC5 !important;
+        font-variant-numeric: tabular-nums;
+    }
+    .big-table td.rank {
+        text-align: center;
+        font-size: 28px !important;
+        font-weight: 900 !important;
+        color: #3B2BC5 !important;
     }
     </style>
     """,
@@ -154,6 +206,37 @@ def fmt_num(value):
     if pd.isna(value):
         return "-"
     return f"{value:,.0f}"
+
+
+def render_big_table(df, numeric_cols=None, rank_col=None):
+    """Render a custom HTML table so numeric font size is fully controllable."""
+    import html as _html
+
+    numeric_cols = set(numeric_cols or [])
+    work = df.copy()
+
+    parts = ['<div class="big-table-wrap"><table class="big-table"><thead><tr>']
+    for col in work.columns:
+        parts.append(f'<th>{_html.escape(str(col))}</th>')
+    parts.append('</tr></thead><tbody>')
+
+    for _, row in work.iterrows():
+        parts.append('<tr>')
+        for col in work.columns:
+            value = row[col]
+            if col in numeric_cols:
+                display = fmt_num(value)
+                parts.append(f'<td class="num">{_html.escape(display)}</td>')
+            elif rank_col and col == rank_col:
+                display = "-" if pd.isna(value) else str(value)
+                parts.append(f'<td class="rank">{_html.escape(display)}</td>')
+            else:
+                display = "-" if pd.isna(value) else str(value)
+                parts.append(f'<td class="text">{_html.escape(display)}</td>')
+        parts.append('</tr>')
+
+    parts.append('</tbody></table></div>')
+    st.markdown(''.join(parts), unsafe_allow_html=True)
 
 
 def kpi_card(label, value, note=""):
@@ -395,18 +478,9 @@ with c2:
         "Unique_Items": "Items",
         "Oldest_Aging_Day": "Oldest Aging",
     })
-    st.dataframe(
+    render_big_table(
         loc_display,
-        use_container_width=True,
-        hide_index=True,
-        height=430,
-        column_config={
-            "Qty Received": st.column_config.NumberColumn(format=","),
-            "In Quarantine": st.column_config.NumberColumn(format=","),
-            "To Inspect": st.column_config.NumberColumn(format=","),
-            "Items": st.column_config.NumberColumn(format=","),
-            "Oldest Aging": st.column_config.NumberColumn(format=","),
-        },
+        numeric_cols=["Qty Received", "In Quarantine", "To Inspect", "Items", "Oldest Aging"],
     )
 
 
@@ -478,21 +552,13 @@ show = top_items[[
     "Oldest_Aging_Day": "Oldest Aging",
 })
 
-st.dataframe(
+render_big_table(
     show,
-    use_container_width=True,
-    hide_index=True,
-    height=min(760, 80 + 35 * len(show)),
-    column_config={
-        "Rank": st.column_config.NumberColumn(format="%d"),
-        "Qty Received": st.column_config.NumberColumn(format=","),
-        "Qty Approved": st.column_config.NumberColumn(format=","),
-        "In Quarantine": st.column_config.NumberColumn(format=","),
-        "To Inspect": st.column_config.NumberColumn(format=","),
-        "Oldest Aging": st.column_config.NumberColumn(format=","),
-        "Locations": st.column_config.NumberColumn(format=","),
-        "Receipts": st.column_config.NumberColumn(format=","),
-    },
+    numeric_cols=[
+        "Qty Received", "Qty Approved", "In Quarantine", "To Inspect",
+        "Oldest Aging", "Locations", "Receipts"
+    ],
+    rank_col="Rank",
 )
 
 
