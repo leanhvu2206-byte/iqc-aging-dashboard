@@ -133,7 +133,7 @@ st.markdown(
     .big-table tbody tr:hover {background: #F2F6FF;}
     .big-table td.num {
         text-align: right;
-        font-size: 28px !important;
+        font-size: 14px !important;
         font-weight: 900 !important;
         color: #3B2BC5 !important;
         font-variant-numeric: tabular-nums;
