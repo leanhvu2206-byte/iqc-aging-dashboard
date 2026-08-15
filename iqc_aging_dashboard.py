@@ -1,4 +1,4 @@
-# DASHBOARD VERSION: BIG-NUMBER-TABLES-V2
+# DASHBOARD VERSION: PRO-COLOR-BOLD-CHARTS-V3
 import os
 from datetime import datetime
 
@@ -42,7 +42,8 @@ st.markdown(
 
     .kpi-card {
         background: #FFFFFF;
-        border: 1px solid #E7ECF4;
+        border: 2px solid #DDD6FE;
+        border-left: 6px solid #6D4AFF;
         border-radius: 15px;
         padding: 18px 19px;
         min-height: 120px;
@@ -52,12 +53,6 @@ st.markdown(
     .kpi-value {font-size: 27px; color: #172B4D; font-weight: 800; margin-top: 8px;}
     .kpi-note {font-size: 12px; color: #98A2B3; margin-top: 6px;}
 
-    .section-title {
-        font-size: 16px;
-        font-weight: 800;
-        color: #172B4D;
-        margin: 10px 0 4px 0;
-    }
     div[data-testid="stMetric"] {
         background: white;
         border: 1px solid #E7ECF4;
@@ -68,6 +63,35 @@ st.markdown(
         border: 1px solid #E7ECF4;
         border-radius: 12px;
         overflow: hidden;
+    }
+
+    /* Plotly chart cards */
+    div[data-testid="stPlotlyChart"] {
+        background: linear-gradient(145deg, #FFFFFF 0%, #FCFBFF 100%);
+        border: 2px solid #D8CCFF;
+        border-radius: 18px;
+        padding: 10px 12px 6px 12px;
+        box-shadow: 0 8px 24px rgba(91, 61, 245, 0.10);
+        margin-bottom: 14px;
+    }
+    div[data-testid="stPlotlyChart"]:hover {
+        border-color: #7C3AED;
+        box-shadow: 0 12px 30px rgba(91, 61, 245, 0.18);
+        transition: all .20s ease-in-out;
+    }
+
+    .section-title {
+        display: inline-block;
+        background: linear-gradient(90deg, #5B3DF5 0%, #7C3AED 48%, #2563EB 100%);
+        color: #FFFFFF !important;
+        border: 1px solid #6D4AFF;
+        border-radius: 12px;
+        padding: 9px 15px;
+        margin: 18px 0 10px 0;
+        font-size: 17px !important;
+        font-weight: 900 !important;
+        letter-spacing: .45px;
+        box-shadow: 0 6px 16px rgba(91, 61, 245, 0.20);
     }
 
     .big-table-wrap {
@@ -109,7 +133,7 @@ st.markdown(
     .big-table tbody tr:hover {background: #F2F6FF;}
     .big-table td.num {
         text-align: right;
-        font-size: 16px !important;
+        font-size: 28px !important;
         font-weight: 900 !important;
         color: #3B2BC5 !important;
         font-variant-numeric: tabular-nums;
@@ -253,18 +277,51 @@ def kpi_card(label, value, note=""):
 
 
 def chart_layout(fig, height=390):
+    # Professional, high-contrast chart typography + saturated palette
     fig.update_layout(
         height=height,
-        margin=dict(l=20, r=20, t=55, b=25),
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", color="#344054"),
-        title_font=dict(size=16, color="#172B4D"),
+        margin=dict(l=28, r=28, t=72, b=38),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#FFFFFF",
+        font=dict(family="Arial Black, Arial, sans-serif", size=14, color="#172B4D"),
+        title=dict(
+            font=dict(family="Arial Black, Arial, sans-serif", size=20, color="#3B1FA8"),
+            x=0.02,
+            xanchor="left",
+        ),
+        legend=dict(
+            font=dict(family="Arial Black, Arial, sans-serif", size=13, color="#24324A"),
+            bgcolor="rgba(255,255,255,0.92)",
+            bordercolor="#DDD6FE",
+            borderwidth=1,
+        ),
         legend_title_text="",
-        hoverlabel=dict(bgcolor="white"),
+        hoverlabel=dict(
+            bgcolor="#1E1B4B",
+            bordercolor="#7C3AED",
+            font=dict(family="Arial Black, Arial, sans-serif", size=14, color="white"),
+        ),
+        colorway=["#5B3DF5", "#00A6FB", "#FF8A00", "#FF3D81", "#10B981", "#EF4444", "#8B5CF6", "#06B6D4"],
     )
-    fig.update_xaxes(showgrid=False, linecolor="#E7ECF4")
-    fig.update_yaxes(gridcolor="#EEF2F7", zeroline=False)
+    fig.update_xaxes(
+        showgrid=False,
+        linecolor="#C7D2FE",
+        linewidth=1.3,
+        tickfont=dict(family="Arial Black, Arial, sans-serif", size=13, color="#334155"),
+        title_font=dict(family="Arial Black, Arial, sans-serif", size=14, color="#312E81"),
+        ticks="outside",
+        tickcolor="#7C3AED",
+    )
+    fig.update_yaxes(
+        gridcolor="#EDE9FE",
+        gridwidth=1.1,
+        zeroline=False,
+        linecolor="#C7D2FE",
+        tickfont=dict(family="Arial Black, Arial, sans-serif", size=13, color="#334155"),
+        title_font=dict(family="Arial Black, Arial, sans-serif", size=14, color="#312E81"),
+        ticks="outside",
+        tickcolor="#7C3AED",
+    )
     return fig
 
 
@@ -410,7 +467,12 @@ with left:
         title="QUANTITY TO INSPECT BY AGING BUCKET",
         labels={"Quantity_To_Inspect": "Qty To Inspect", "Aging Bucket": "Aging Day"},
     )
-    fig.update_traces(marker_color="#1769E0", textposition="outside")
+    fig.update_traces(
+        marker_color=["#5B3DF5", "#00A6FB", "#10B981", "#FF8A00", "#FF3D81", "#EF4444", "#8B5CF6", "#06B6D4"][:len(aging)],
+        textposition="outside",
+        textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#312E81"),
+        marker_line_color="#FFFFFF", marker_line_width=1.5,
+    )
     st.plotly_chart(chart_layout(fig), use_container_width=True)
 
 with right:
@@ -426,13 +488,13 @@ with right:
     fig.add_trace(
         go.Scatter(
             x=trend["Created Date"], y=trend["Quantity_To_Inspect"],
-            mode="lines+markers", name="To Inspect", line=dict(width=3, color="#1769E0")
+            mode="lines+markers", name="To Inspect", line=dict(width=4, color="#5B3DF5")
         )
     )
     fig.add_trace(
         go.Scatter(
             x=trend["Created Date"], y=trend["Quantity_In_Quarantine"],
-            mode="lines+markers", name="In Quarantine", line=dict(width=2, color="#F59E0B")
+            mode="lines+markers", name="In Quarantine", line=dict(width=4, color="#FF8A00")
         )
     )
     fig.update_layout(title="IQC QUANTITY TREND BY CREATED DATE")
@@ -466,7 +528,12 @@ with c1:
         title="QUANTITY TO INSPECT BY LOCATION",
         labels={"Quantity_To_Inspect": "Qty To Inspect"},
     )
-    fig.update_traces(marker_color="#1769E0")
+    fig.update_traces(
+        marker_color="#00A6FB",
+        marker_line_color="#2563EB",
+        marker_line_width=1.5,
+        textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#1E3A8A"),
+    )
     fig.update_yaxes(categoryorder="total ascending")
     st.plotly_chart(chart_layout(fig, 430), use_container_width=True)
 
@@ -522,7 +589,11 @@ fig = px.bar(
     labels={rank_col: rank_metric, "Item": "Item Code"},
     hover_data=["Quantity_Received", "Quantity_In_Quarantine", "Quantity_To_Inspect", "Oldest_Aging_Day"],
 )
-fig.update_traces(marker_color="#1769E0", texttemplate="%{text:,.0f}", textposition="outside")
+fig.update_traces(
+    marker_color="#5B3DF5", marker_line_color="#3B1FA8", marker_line_width=1.2,
+    texttemplate="%{text:,.0f}", textposition="outside",
+    textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#3B1FA8")
+)
 st.plotly_chart(chart_layout(fig, max(440, 38 * top_n + 150)), use_container_width=True)
 
 # Second Top N chart: aging risk
@@ -536,7 +607,11 @@ fig = px.bar(
     title=f"TOP {top_n} OLDEST ITEMS",
     labels={"Oldest_Aging_Day": "Oldest Aging Day", "Item": "Item Code"},
 )
-fig.update_traces(marker_color="#F59E0B", texttemplate="%{text:,.0f} days", textposition="outside")
+fig.update_traces(
+    marker_color="#FF8A00", marker_line_color="#EA580C", marker_line_width=1.2,
+    texttemplate="%{text:,.0f} days", textposition="outside",
+    textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#9A3412")
+)
 st.plotly_chart(chart_layout(fig, max(440, 38 * top_n + 150)), use_container_width=True)
 
 # Top N table
@@ -583,6 +658,10 @@ fig = px.bar(
     title="QUANTITY BY INSPECTION CATEGORY",
     labels={"value": "Quantity", "variable": "Metric"},
 )
+fig.update_traces(marker_line_color="#FFFFFF", marker_line_width=1.2)
+for i, trace in enumerate(fig.data):
+    trace.marker.color = ["#5B3DF5", "#FF3D81"][i % 2]
+    trace.textfont = dict(family="Arial Black, Arial, sans-serif", size=14)
 st.plotly_chart(chart_layout(fig, 420), use_container_width=True)
 
 
