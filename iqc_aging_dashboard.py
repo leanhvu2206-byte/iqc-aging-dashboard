@@ -441,10 +441,8 @@ selected_categories = st.sidebar.multiselect(
 
 st.sidebar.markdown("---")
 top_n = st.sidebar.slider("Top N Items", min_value=1, max_value=20, value=10, step=1)
-rank_metric = st.sidebar.selectbox(
-    "Rank Top Items By",
-    ["Quantity To Inspect", "Quantity In Quarantine", "Quantity Received", "Aging day"],
-)
+# Top Item chart is fixed to Quantity In Quarantine
+rank_metric = "Quantity In Quarantine"
 
 # Apply filter
 filtered = df.copy()
