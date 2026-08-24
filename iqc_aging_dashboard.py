@@ -29,7 +29,7 @@ st.markdown(
     <style>
     .stApp {background-color: #F6F8FC;}
     [data-testid="stSidebar"] {background-color: #FFFFFF; border-right: 1px solid #E8EDF5;}
-    .block-container {padding-: 1.1rem; padding-bottom: 2.5rem; max-width: 1800px;}
+    .block-container {padding-top: 1.1rem; padding-bottom: 2.5rem; max-width: 1800px;}
 
     .hero {
         background: linear-gradient(90deg, #0A3A8D 0%, #065AC9 100%);
@@ -52,8 +52,8 @@ st.markdown(
         box-shadow: 0 5px 18px rgba(31, 48, 78, 0.05);
     }
     .kpi-label {font-size: 12px; color: #667085; font-weight: 700; text-transform: uppercase;}
-    .kpi-value {font-size: 27px; color: #172B4D; font-weight: 800; margin-: 8px;}
-    .kpi-note {font-size: 12px; color: #98A2B3; margin-: 6px;}
+    .kpi-value {font-size: 27px; color: #172B4D; font-weight: 800; margin-top: 8px;}
+    .kpi-note {font-size: 12px; color: #98A2B3; margin-top: 6px;}
 
     div[data-testid="stMetric"] {
         background: white;
@@ -102,7 +102,7 @@ st.markdown(
         border-radius: 14px;
         overflow-x: auto;
         box-shadow: 0 4px 14px rgba(31, 48, 78, 0.05);
-        margin-: 4px;
+        margin-top: 4px;
         margin-bottom: 14px;
     }
     .big-table {
@@ -379,11 +379,11 @@ try:
 
     else:
         st.info("Upload file 'IQC Aging day(1).xlsx' in the left sidebar to start.")
-        st.s()
+        st.stop()
 
 except Exception as exc:
     st.error(f"Cannot read Excel file: {exc}")
-    st.s()
+    st.stop()
 
 
 # ------------------------------------------------------------
@@ -409,7 +409,7 @@ valid_dates = df["Date Created"].dropna()
 
 if valid_dates.empty:
     st.error("No valid values found in 'Date Created'.")
-    st.s()
+    st.stop()
 
 min_date = valid_dates.min().date()
 max_date = valid_dates.max().date()
@@ -440,8 +440,8 @@ selected_categories = st.sidebar.multiselect(
 )
 
 st.sidebar.markdown("---")
-_n = st.sidebar.slider(" N Items", min_value=1, max_value=20, value=10, step=1)
-#  Item chart is fixed to Quantity In Quarantine
+top_n = st.sidebar.slider("Top N Items", min_value=1, max_value=20, value=10, step=1)
+# Top Item chart is fixed to Quantity In Quarantine
 rank_metric = "Quantity In Quarantine"
 
 # Apply filter
@@ -468,7 +468,7 @@ st.sidebar.caption(f"Rows after filters: {len(filtered):,} / {len(df):,}")
 
 if filtered.empty:
     st.warning("No data matches the current filters.")
-    st.s()
+    st.stop()
 
 
 # ------------------------------------------------------------
@@ -670,10 +670,10 @@ with c2:
 
 
 # ------------------------------------------------------------
-#  N ITEM SECTION
+# TOP N ITEM SECTION
 # ------------------------------------------------------------
 st.markdown(
-    f'<div class="section-title"> {_n} ITEM ANALYSIS</div>',
+    f'<div class="section-title">TOP {top_n} ITEM ANALYSIS</div>',
     unsafe_allow_html=True
 )
 
@@ -707,23 +707,23 @@ metric_map = {
 
 rank_col = metric_map[rank_metric]
 
-_items = (
+top_items = (
     item_summary
     .sort_values(rank_col, ascending=False)
-    .head(_n)
+    .head(top_n)
     .copy()
 )
 
-_items["Rank"] = range(1, len(_items) + 1)
+top_items["Rank"] = range(1, len(top_items) + 1)
 
 
 fig = px.bar(
-    _items.sort_values(rank_col, ascending=True),
+    top_items.sort_values(rank_col, ascending=True),
     x=rank_col,
     y="Item",
     orientation="h",
     text=rank_col,
-    title=f" {top_n} ITEMS BY {rank_metric.upper()}",
+    title=f"TOP {top_n} ITEMS BY {rank_metric.upper()}",
     labels={
         rank_col: rank_metric,
         "Item": "Item Code"
