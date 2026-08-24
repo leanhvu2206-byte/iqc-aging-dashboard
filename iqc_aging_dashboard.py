@@ -768,29 +768,63 @@ risk_top = (
     .head(top_n)
 )
 
+risk_plot = risk_top.sort_values("Oldest_Aging_Day", ascending=True).copy()
+
+# Text inside orange bar = Quantity In Quarantine
+risk_plot["Quarantine_Label"] = (
+    "Q: " + risk_plot["Quantity_In_Quarantine"].fillna(0).round(0).astype(int).astype(str)
+)
+
 fig = px.bar(
-    risk_top.sort_values("Oldest_Aging_Day", ascending=True),
+    risk_plot,
     x="Oldest_Aging_Day",
     y="Item",
     orientation="h",
-    text="Oldest_Aging_Day",
+    text="Quarantine_Label",
     title=f"TOP {top_n} OLDEST ITEMS",
     labels={
         "Oldest_Aging_Day": "Oldest Aging Day",
         "Item": "Item Code"
     },
+    custom_data=["Quantity_In_Quarantine"],
 )
 
+# Quarantine quantity displayed inside orange bars
 fig.update_traces(
     marker_color="#FF8A00",
     marker_line_color="#EA580C",
     marker_line_width=1.2,
-    texttemplate="%{text:,.0f} days",
-    textposition="outside",
+    textposition="inside",
+    insidetextanchor="middle",
     textfont=dict(
         family="Arial Black, Arial, sans-serif",
-        size=15,
-        color="#9A3412"
+        size=14,
+        color="white"
+    ),
+    hovertemplate=(
+        "<b>%{y}</b><br>"
+        "Oldest Aging: %{x:,.0f} days<br>"
+        "Quantity In Quarantine: %{customdata[0]:,.0f}"
+        "<extra></extra>"
+    )
+)
+
+# Aging days displayed at the end of each orange bar
+fig.add_trace(
+    go.Scatter(
+        x=risk_plot["Oldest_Aging_Day"],
+        y=risk_plot["Item"],
+        mode="text",
+        text=risk_plot["Oldest_Aging_Day"].round(0).astype(int).astype(str) + " days",
+        textposition="middle right",
+        textfont=dict(
+            family="Arial Black, Arial, sans-serif",
+            size=13,
+            color="#9A3412"
+        ),
+        hoverinfo="skip",
+        showlegend=False,
+        cliponaxis=False,
     )
 )
 
