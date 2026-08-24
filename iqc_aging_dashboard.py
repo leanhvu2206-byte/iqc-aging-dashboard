@@ -772,7 +772,7 @@ risk_plot = risk_top.sort_values("Oldest_Aging_Day", ascending=True).copy()
 
 # Text inside orange bar = Quantity In Quarantine
 risk_plot["Quarantine_Label"] = (
-    "Qty: " + risk_plot["Quantity_In_Quarantine"].fillna(0).round(0).astype(int).astype(str)
+    "Q: " + risk_plot["Quantity_In_Quarantine"].fillna(0).round(0).astype(int).astype(str)
 )
 
 fig = px.bar(
