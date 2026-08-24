@@ -504,7 +504,7 @@ with left:
         filtered.groupby("Aging Bucket", observed=False)
         .agg(
             Quantity_To_Inspect=("Quantity To Inspect", "sum"),
-            Rows=("Item", "size"),
+            Item_Count=("Item", "nunique"),
         )
         .reset_index()
     )
@@ -517,16 +517,33 @@ with left:
 
     aging = aging.sort_values("Aging Bucket")
 
+    # Main value shown above each bar
+    aging["Qty_Label"] = aging["Quantity_To_Inspect"].map(lambda x: f"{x:,.0f}")
+
+    # Item count shown as a second line
+    aging["Item_Label"] = aging["Item_Count"].map(
+        lambda x: f"{int(x)} item" if int(x) == 1 else f"{int(x)} items"
+    )
+
+    # Combine both labels
+    aging["Bar_Label"] = (
+        aging["Qty_Label"] +
+        "<br><span style='font-size:12px'>" +
+        aging["Item_Label"] +
+        "</span>"
+    )
+
     fig = px.bar(
         aging,
         x="Aging Bucket",
         y="Quantity_To_Inspect",
-        text_auto=",.0f",
+        text="Bar_Label",
         title="QUANTITY TO INSPECT BY AGING BUCKET",
         labels={
             "Quantity_To_Inspect": "Qty To Inspect",
             "Aging Bucket": "Aging Day"
         },
+        custom_data=["Item_Count"],
     )
 
     fig.update_traces(
@@ -535,6 +552,7 @@ with left:
             "#FF3D81", "#EF4444", "#8B5CF6", "#06B6D4"
         ][:len(aging)],
         textposition="outside",
+        texttemplate="%{text}",
         textfont=dict(
             family="Arial Black, Arial, sans-serif",
             size=15,
@@ -542,7 +560,18 @@ with left:
         ),
         marker_line_color="#FFFFFF",
         marker_line_width=1.5,
+        hovertemplate=(
+            "<b>Aging Bucket: %{x}</b><br>"
+            "Quantity To Inspect: %{y:,.0f}<br>"
+            "Total Items: %{customdata[0]:,.0f}"
+            "<extra></extra>"
+        )
     )
+
+    # Add a little extra headroom so the 2-line labels are not cut off
+    max_qty = aging["Quantity_To_Inspect"].max()
+    if pd.notna(max_qty) and max_qty > 0:
+        fig.update_yaxes(range=[0, max_qty * 1.22])
 
     st.plotly_chart(
         chart_layout(fig),
