@@ -1,5 +1,7 @@
 # DASHBOARD VERSION: PRO-COLOR-BOLD-CHARTS-V3
 import os
+import hashlib
+from io import BytesIO
 from datetime import datetime
 
 import pandas as pd
@@ -197,9 +199,7 @@ def aging_bucket(days):
     return ">365"
 
 
-@st.cache_data(show_spinner=False)
-def load_excel(source):
-    df = pd.read_excel(source, sheet_name="Sheet2", engine="openpyxl")
+def prepare_excel(df):
     df.columns = [str(c).strip() for c in df.columns]
 
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
@@ -216,14 +216,43 @@ def load_excel(source):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Aging day in the workbook is a NOW()-Date formula. Recalculate in Python so
-    # the dashboard is always current and does not depend on Excel cached formulas.
+    # Recalculate Aging day in Python
     today = pd.Timestamp.now().normalize()
     df["Aging day"] = (today - df["Date Created"].dt.normalize()).dt.days.clip(lower=0)
     df["Aging Bucket"] = df["Aging day"].apply(aging_bucket)
     df["Created Date"] = df["Date Created"].dt.date
 
     return df
+
+
+@st.cache_data(show_spinner=False)
+def load_excel_from_bytes(file_bytes, file_hash):
+    # file_hash is intentionally part of the cache key.
+    # When Excel content changes, the hash changes and Streamlit reloads the file.
+    df = pd.read_excel(
+        BytesIO(file_bytes),
+        sheet_name="Sheet2",
+        engine="openpyxl"
+    )
+    return prepare_excel(df)
+
+
+def load_excel(source):
+    # Streamlit uploaded file
+    if hasattr(source, "getvalue"):
+        file_bytes = source.getvalue()
+
+    # Local/GitHub repository file
+    else:
+        with open(source, "rb") as f:
+            file_bytes = f.read()
+
+    file_hash = hashlib.md5(file_bytes).hexdigest()
+
+    return load_excel_from_bytes(
+        file_bytes,
+        file_hash
+    )
 
 
 def fmt_num(value):
@@ -329,18 +358,29 @@ def chart_layout(fig, height=390):
 # DATA INPUT
 # ------------------------------------------------------------
 default_file = "IQC Aging day(1).xlsx"
-uploaded = st.sidebar.file_uploader("Upload IQC Aging Excel", type=["xlsx"])
+
+uploaded = st.sidebar.file_uploader(
+    "Upload IQC Aging Excel",
+    type=["xlsx"]
+)
+
+if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
 
 try:
     if uploaded is not None:
         df = load_excel(uploaded)
         source_name = uploaded.name
+
     elif os.path.exists(default_file):
         df = load_excel(default_file)
         source_name = default_file
+
     else:
         st.info("Upload file 'IQC Aging day(1).xlsx' in the left sidebar to start.")
         st.stop()
+
 except Exception as exc:
     st.error(f"Cannot read Excel file: {exc}")
     st.stop()
@@ -366,6 +406,11 @@ st.markdown(
 st.sidebar.markdown("## 🔎 Filters")
 
 valid_dates = df["Date Created"].dropna()
+
+if valid_dates.empty:
+    st.error("No valid values found in 'Date Created'.")
+    st.stop()
+
 min_date = valid_dates.min().date()
 max_date = valid_dates.max().date()
 
@@ -403,6 +448,7 @@ rank_metric = st.sidebar.selectbox(
 
 # Apply filter
 filtered = df.copy()
+
 if isinstance(selected_dates, (tuple, list)) and len(selected_dates) == 2:
     start_date, end_date = selected_dates
     mask = filtered["Date Created"].dt.date.between(start_date, end_date)
@@ -410,10 +456,13 @@ if isinstance(selected_dates, (tuple, list)) and len(selected_dates) == 2:
 
 if selected_items:
     filtered = filtered[filtered["Item"].isin(selected_items)]
+
 if selected_locations:
     filtered = filtered[filtered["Location"].isin(selected_locations)]
+
 if selected_buckets:
     filtered = filtered[filtered["Aging Bucket"].isin(selected_buckets)]
+
 if selected_categories:
     filtered = filtered[filtered["Inspection Category"].isin(selected_categories)]
 
@@ -428,14 +477,19 @@ if filtered.empty:
 # KPI ROW
 # ------------------------------------------------------------
 cols = st.columns(5)
+
 with cols[0]:
     kpi_card("Quantity Received", fmt_num(filtered["Quantity Received"].sum()), "Selected records")
+
 with cols[1]:
     kpi_card("In Quarantine", fmt_num(filtered["Quantity In Quarantine"].sum()), "Current filter")
+
 with cols[2]:
     kpi_card("To Inspect", fmt_num(filtered["Quantity To Inspect"].sum()), "Current filter")
+
 with cols[3]:
     kpi_card("Oldest Aging Day", fmt_num(filtered["Aging day"].max()), "Days")
+
 with cols[4]:
     kpi_card("Unique Items", fmt_num(filtered["Item"].nunique()), "Distinct item codes")
 
@@ -456,7 +510,13 @@ with left:
         )
         .reset_index()
     )
-    aging["Aging Bucket"] = pd.Categorical(aging["Aging Bucket"], AGING_ORDER, ordered=True)
+
+    aging["Aging Bucket"] = pd.Categorical(
+        aging["Aging Bucket"],
+        AGING_ORDER,
+        ordered=True
+    )
+
     aging = aging.sort_values("Aging Bucket")
 
     fig = px.bar(
@@ -465,15 +525,32 @@ with left:
         y="Quantity_To_Inspect",
         text_auto=",.0f",
         title="QUANTITY TO INSPECT BY AGING BUCKET",
-        labels={"Quantity_To_Inspect": "Qty To Inspect", "Aging Bucket": "Aging Day"},
+        labels={
+            "Quantity_To_Inspect": "Qty To Inspect",
+            "Aging Bucket": "Aging Day"
+        },
     )
+
     fig.update_traces(
-        marker_color=["#5B3DF5", "#00A6FB", "#10B981", "#FF8A00", "#FF3D81", "#EF4444", "#8B5CF6", "#06B6D4"][:len(aging)],
+        marker_color=[
+            "#5B3DF5", "#00A6FB", "#10B981", "#FF8A00",
+            "#FF3D81", "#EF4444", "#8B5CF6", "#06B6D4"
+        ][:len(aging)],
         textposition="outside",
-        textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#312E81"),
-        marker_line_color="#FFFFFF", marker_line_width=1.5,
+        textfont=dict(
+            family="Arial Black, Arial, sans-serif",
+            size=15,
+            color="#312E81"
+        ),
+        marker_line_color="#FFFFFF",
+        marker_line_width=1.5,
     )
-    st.plotly_chart(chart_layout(fig), use_container_width=True)
+
+    st.plotly_chart(
+        chart_layout(fig),
+        use_container_width=True
+    )
+
 
 with right:
     trend = (
@@ -484,27 +561,47 @@ with right:
         )
         .sort_values("Created Date")
     )
+
     fig = go.Figure()
+
     fig.add_trace(
         go.Scatter(
-            x=trend["Created Date"], y=trend["Quantity_To_Inspect"],
-            mode="lines+markers", name="To Inspect", line=dict(width=4, color="#5B3DF5")
+            x=trend["Created Date"],
+            y=trend["Quantity_To_Inspect"],
+            mode="lines+markers",
+            name="To Inspect",
+            line=dict(width=4, color="#5B3DF5")
         )
     )
+
     fig.add_trace(
         go.Scatter(
-            x=trend["Created Date"], y=trend["Quantity_In_Quarantine"],
-            mode="lines+markers", name="In Quarantine", line=dict(width=4, color="#FF8A00")
+            x=trend["Created Date"],
+            y=trend["Quantity_In_Quarantine"],
+            mode="lines+markers",
+            name="In Quarantine",
+            line=dict(width=4, color="#FF8A00")
         )
     )
-    fig.update_layout(title="IQC QUANTITY TREND BY CREATED DATE")
-    st.plotly_chart(chart_layout(fig), use_container_width=True)
+
+    fig.update_layout(
+        title="IQC QUANTITY TREND BY CREATED DATE"
+    )
+
+    st.plotly_chart(
+        chart_layout(fig),
+        use_container_width=True
+    )
 
 
 # ------------------------------------------------------------
 # LOCATION SECTION
 # ------------------------------------------------------------
-st.markdown('<div class="section-title">LOCATION ANALYSIS</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-title">LOCATION ANALYSIS</div>',
+    unsafe_allow_html=True
+)
+
 loc = (
     filtered.groupby("Location", as_index=False)
     .agg(
@@ -518,6 +615,7 @@ loc = (
 )
 
 c1, c2 = st.columns([1.15, 1])
+
 with c1:
     fig = px.bar(
         loc,
@@ -528,46 +626,79 @@ with c1:
         title="QUANTITY TO INSPECT BY LOCATION",
         labels={"Quantity_To_Inspect": "Qty To Inspect"},
     )
+
     fig.update_traces(
         marker_color="#00A6FB",
         marker_line_color="#2563EB",
         marker_line_width=1.5,
-        textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#1E3A8A"),
+        textfont=dict(
+            family="Arial Black, Arial, sans-serif",
+            size=15,
+            color="#1E3A8A"
+        ),
     )
-    fig.update_yaxes(categoryorder="total ascending")
-    st.plotly_chart(chart_layout(fig, 430), use_container_width=True)
+
+    fig.update_yaxes(
+        categoryorder="total ascending"
+    )
+
+    st.plotly_chart(
+        chart_layout(fig, 430),
+        use_container_width=True
+    )
+
 
 with c2:
-    loc_display = loc.rename(columns={
-        "Quantity_Received": "Qty Received",
-        "Quantity_In_Quarantine": "In Quarantine",
-        "Quantity_To_Inspect": "To Inspect",
-        "Unique_Items": "Items",
-        "Oldest_Aging_Day": "Oldest Aging",
-    })
+    loc_display = loc.rename(
+        columns={
+            "Quantity_Received": "Qty Received",
+            "Quantity_In_Quarantine": "In Quarantine",
+            "Quantity_To_Inspect": "To Inspect",
+            "Unique_Items": "Items",
+            "Oldest_Aging_Day": "Oldest Aging",
+        }
+    )
+
     render_big_table(
         loc_display,
-        numeric_cols=["Qty Received", "In Quarantine", "To Inspect", "Items", "Oldest Aging"],
+        numeric_cols=[
+            "Qty Received",
+            "In Quarantine",
+            "To Inspect",
+            "Items",
+            "Oldest Aging"
+        ],
     )
 
 
 # ------------------------------------------------------------
 # TOP N ITEM SECTION
 # ------------------------------------------------------------
-st.markdown(f'<div class="section-title">TOP {top_n} ITEM ANALYSIS</div>', unsafe_allow_html=True)
+st.markdown(
+    f'<div class="section-title">TOP {top_n} ITEM ANALYSIS</div>',
+    unsafe_allow_html=True
+)
+
+agg_dict = {
+    "Quantity_Received": ("Quantity Received", "sum"),
+    "Quantity_Approved": ("Quantity Approved (Total)", "sum"),
+    "Quantity_In_Quarantine": ("Quantity In Quarantine", "sum"),
+    "Quantity_To_Inspect": ("Quantity To Inspect", "sum"),
+    "Oldest_Aging_Day": ("Aging day", "max"),
+    "Locations": ("Location", "nunique"),
+}
+
+if "Item Receipt" in filtered.columns:
+    agg_dict["Receipts"] = ("Item Receipt", "nunique")
 
 item_summary = (
     filtered.groupby("Item", as_index=False)
-    .agg(
-        Quantity_Received=("Quantity Received", "sum"),
-        Quantity_Approved=("Quantity Approved (Total)", "sum"),
-        Quantity_In_Quarantine=("Quantity In Quarantine", "sum"),
-        Quantity_To_Inspect=("Quantity To Inspect", "sum"),
-        Oldest_Aging_Day=("Aging day", "max"),
-        Locations=("Location", "nunique"),
-        Receipts=("Item Receipt", "nunique"),
-    )
+    .agg(**agg_dict)
 )
+
+if "Receipts" not in item_summary.columns:
+    item_summary["Receipts"] = 0
+
 
 metric_map = {
     "Quantity To Inspect": "Quantity_To_Inspect",
@@ -575,9 +706,18 @@ metric_map = {
     "Quantity Received": "Quantity_Received",
     "Aging day": "Oldest_Aging_Day",
 }
+
 rank_col = metric_map[rank_metric]
-top_items = item_summary.sort_values(rank_col, ascending=False).head(top_n).copy()
+
+top_items = (
+    item_summary
+    .sort_values(rank_col, ascending=False)
+    .head(top_n)
+    .copy()
+)
+
 top_items["Rank"] = range(1, len(top_items) + 1)
+
 
 fig = px.bar(
     top_items.sort_values(rank_col, ascending=True),
@@ -586,18 +726,50 @@ fig = px.bar(
     orientation="h",
     text=rank_col,
     title=f"TOP {top_n} ITEMS BY {rank_metric.upper()}",
-    labels={rank_col: rank_metric, "Item": "Item Code"},
-    hover_data=["Quantity_Received", "Quantity_In_Quarantine", "Quantity_To_Inspect", "Oldest_Aging_Day"],
+    labels={
+        rank_col: rank_metric,
+        "Item": "Item Code"
+    },
+    hover_data=[
+        "Quantity_Received",
+        "Quantity_In_Quarantine",
+        "Quantity_To_Inspect",
+        "Oldest_Aging_Day"
+    ],
 )
+
 fig.update_traces(
-    marker_color="#5B3DF5", marker_line_color="#3B1FA8", marker_line_width=1.2,
-    texttemplate="%{text:,.0f}", textposition="outside",
-    textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#3B1FA8")
+    marker_color="#5B3DF5",
+    marker_line_color="#3B1FA8",
+    marker_line_width=1.2,
+    texttemplate="%{text:,.0f}",
+    textposition="outside",
+    textfont=dict(
+        family="Arial Black, Arial, sans-serif",
+        size=15,
+        color="#3B1FA8"
+    )
 )
-st.plotly_chart(chart_layout(fig, max(440, 38 * top_n + 150)), use_container_width=True)
+
+st.plotly_chart(
+    chart_layout(
+        fig,
+        max(440, 38 * top_n + 150)
+    ),
+    use_container_width=True
+)
+
 
 # Second Top N chart: aging risk
-risk_top = item_summary.sort_values(["Oldest_Aging_Day", "Quantity_To_Inspect"], ascending=[False, False]).head(top_n)
+risk_top = (
+    item_summary
+    .sort_values(
+        ["Oldest_Aging_Day", "Quantity_To_Inspect"],
+        ascending=[False, False]
+    )
+    .head(top_n)
+)
+
 fig = px.bar(
     risk_top.sort_values("Oldest_Aging_Day", ascending=True),
     x="Oldest_Aging_Day",
@@ -605,33 +777,67 @@ fig = px.bar(
     orientation="h",
     text="Oldest_Aging_Day",
     title=f"TOP {top_n} OLDEST ITEMS",
-    labels={"Oldest_Aging_Day": "Oldest Aging Day", "Item": "Item Code"},
+    labels={
+        "Oldest_Aging_Day": "Oldest Aging Day",
+        "Item": "Item Code"
+    },
 )
+
 fig.update_traces(
-    marker_color="#FF8A00", marker_line_color="#EA580C", marker_line_width=1.2,
-    texttemplate="%{text:,.0f} days", textposition="outside",
-    textfont=dict(family="Arial Black, Arial, sans-serif", size=15, color="#9A3412")
+    marker_color="#FF8A00",
+    marker_line_color="#EA580C",
+    marker_line_width=1.2,
+    texttemplate="%{text:,.0f} days",
+    textposition="outside",
+    textfont=dict(
+        family="Arial Black, Arial, sans-serif",
+        size=15,
+        color="#9A3412"
+    )
 )
-st.plotly_chart(chart_layout(fig, max(440, 38 * top_n + 150)), use_container_width=True)
+
+st.plotly_chart(
+    chart_layout(
+        fig,
+        max(440, 38 * top_n + 150)
+    ),
+    use_container_width=True
+)
+
 
 # Top N table
-show = top_items[[
-    "Rank", "Item", "Quantity_Received", "Quantity_Approved",
-    "Quantity_In_Quarantine", "Quantity_To_Inspect",
-    "Oldest_Aging_Day", "Locations", "Receipts"
-]].rename(columns={
-    "Quantity_Received": "Qty Received",
-    "Quantity_Approved": "Qty Approved",
-    "Quantity_In_Quarantine": "In Quarantine",
-    "Quantity_To_Inspect": "To Inspect",
-    "Oldest_Aging_Day": "Oldest Aging",
-})
+show = top_items[
+    [
+        "Rank",
+        "Item",
+        "Quantity_Received",
+        "Quantity_Approved",
+        "Quantity_In_Quarantine",
+        "Quantity_To_Inspect",
+        "Oldest_Aging_Day",
+        "Locations",
+        "Receipts"
+    ]
+].rename(
+    columns={
+        "Quantity_Received": "Qty Received",
+        "Quantity_Approved": "Qty Approved",
+        "Quantity_In_Quarantine": "In Quarantine",
+        "Quantity_To_Inspect": "To Inspect",
+        "Oldest_Aging_Day": "Oldest Aging",
+    }
+)
 
 render_big_table(
     show,
     numeric_cols=[
-        "Qty Received", "Qty Approved", "In Quarantine", "To Inspect",
-        "Oldest Aging", "Locations", "Receipts"
+        "Qty Received",
+        "Qty Approved",
+        "In Quarantine",
+        "To Inspect",
+        "Oldest Aging",
+        "Locations",
+        "Receipts"
     ],
     rank_col="Rank",
 )
@@ -640,7 +846,11 @@ render_big_table(
 # ------------------------------------------------------------
 # INSPECTION CATEGORY
 # ------------------------------------------------------------
-st.markdown('<div class="section-title">INSPECTION CATEGORY</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-title">INSPECTION CATEGORY</div>',
+    unsafe_allow_html=True
+)
+
 cat = (
     filtered.groupby("Inspection Category", as_index=False)
     .agg(
@@ -650,37 +860,90 @@ cat = (
     )
     .sort_values("Quantity_To_Inspect", ascending=False)
 )
+
 fig = px.bar(
     cat,
     x="Inspection Category",
-    y=["Quantity_To_Inspect", "Quantity_In_Quarantine"],
+    y=[
+        "Quantity_To_Inspect",
+        "Quantity_In_Quarantine"
+    ],
     barmode="group",
     title="QUANTITY BY INSPECTION CATEGORY",
-    labels={"value": "Quantity", "variable": "Metric"},
+    labels={
+        "value": "Quantity",
+        "variable": "Metric"
+    },
 )
-fig.update_traces(marker_line_color="#FFFFFF", marker_line_width=1.2)
+
+fig.update_traces(
+    marker_line_color="#FFFFFF",
+    marker_line_width=1.2
+)
+
 for i, trace in enumerate(fig.data):
-    trace.marker.color = ["#5B3DF5", "#FF3D81"][i % 2]
-    trace.textfont = dict(family="Arial Black, Arial, sans-serif", size=14)
-st.plotly_chart(chart_layout(fig, 420), use_container_width=True)
+    trace.marker.color = [
+        "#5B3DF5",
+        "#FF3D81"
+    ][i % 2]
+
+    trace.textfont = dict(
+        family="Arial Black, Arial, sans-serif",
+        size=14
+    )
+
+st.plotly_chart(
+    chart_layout(fig, 420),
+    use_container_width=True
+)
 
 
 # ------------------------------------------------------------
 # DETAIL TABLE + DOWNLOAD
 # ------------------------------------------------------------
-st.markdown('<div class="section-title">FILTERED DETAIL</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-title">FILTERED DETAIL</div>',
+    unsafe_allow_html=True
+)
 
 detail_cols = [
-    "Item", "Date Created", "Location", "Item Receipt", "Line",
-    "Quantity Received", "Quantity Approved (Total)", "Quantity In Quarantine",
-    "Quantity To Inspect", "Inspection Category", "Aging day", "Aging Bucket"
+    "Item",
+    "Date Created",
+    "Location",
+    "Item Receipt",
+    "Line",
+    "Quantity Received",
+    "Quantity Approved (Total)",
+    "Quantity In Quarantine",
+    "Quantity To Inspect",
+    "Inspection Category",
+    "Aging day",
+    "Aging Bucket"
 ]
-detail_cols = [c for c in detail_cols if c in filtered.columns]
-detail = filtered[detail_cols].sort_values("Aging day", ascending=False)
 
-st.dataframe(detail, use_container_width=True, hide_index=True, height=520)
+detail_cols = [
+    c for c in detail_cols
+    if c in filtered.columns
+]
 
-csv = detail.to_csv(index=False).encode("utf-8-sig")
+detail = (
+    filtered[detail_cols]
+    .sort_values("Aging day", ascending=False)
+)
+
+st.dataframe(
+    detail,
+    use_container_width=True,
+    hide_index=True,
+    height=520
+)
+
+csv = (
+    detail
+    .to_csv(index=False)
+    .encode("utf-8-sig")
+)
+
 st.download_button(
     "⬇️ Export filtered data to CSV",
     data=csv,
@@ -688,4 +951,7 @@ st.download_button(
     mime="text/csv",
 )
 
-st.caption("Aging day is recalculated in Python from Date Created to today's date, so it stays current even if Excel formulas are not recalculated.")
+st.caption(
+    "Aging day is recalculated in Python from Date Created to today's date, "
+    "so it stays current even if Excel formulas are not recalculated."
+)
